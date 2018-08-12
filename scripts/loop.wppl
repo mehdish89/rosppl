@@ -1,0 +1,30 @@
+
+var rInfer = function(readings, model, prior, options){
+  var bind = function(){
+    return model(readings, prior)
+  }
+
+  Infer(bind, options)
+}
+
+
+
+
+// var readings = repeat(10, function(){flip(0.9)})
+
+// // inference()
+// var prior = Bernoulli({p:1.})
+
+var options = globalStore.options ? globalStore.options : {
+    method: 'MCMC',
+    samples: 1000
+  }
+
+globalStore.posterior = rInfer(globalStore.readings, globalStore.model, globalStore.prior, options)
+
+// reduce(function(reading, prior){
+//   var posterior = rInfer(reading, model, prior)
+//   console.log('must be ' + reading)
+//   // viz(posterior)
+//   return posterior
+// }, prior, readings);

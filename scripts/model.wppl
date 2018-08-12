@@ -1,0 +1,23 @@
+var model = function(readings, prior){
+  var old = prior ? sample(prior) : true
+  
+  if(readings.coin == undefined)
+		return old
+
+  var coin = flip(0.5) && old 
+  if(flip(0.8))
+    condition(coin == readings.coin)
+  // console.log(prior)
+  return coin
+}
+
+globalStore.model = model
+globalStore.prior = Bernoulli({p: 0.7})
+
+globalStore.subs = {
+	coin: "/flip/data",
+}
+
+globalStore.pubs = {
+	success: "/success/data",
+}

@@ -1,19 +1,21 @@
 {
-  "name": "rosnodejs_examples",
+  "name": "rosppl",
   "version": "0.0.0",
-  "description": "Example programs for ROS Node Javascript client library",
+  "description": "A webppl based proababilistic programming language for ROS with online inference and policy execution capabilities.",
   "keywords": [
-    "ros"
+    "ros",
+    "webppl",
+    "ppl"
   ],
   "scripts": {
     "talker": "node scripts/talker.js",
     "listener": "node scripts/listener.js"
   },
-  "author": "Ian McMahon",
+  "author": "Seyed Mahdi Shamsi",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git://github.com/RethinkRobotics-opensource/rosnodejs_examples"
+    "url": "git://github.com/mehdish89/rosppl.git"
   },
   "dependencies": {
     "rosnodejs": "2.1.1"

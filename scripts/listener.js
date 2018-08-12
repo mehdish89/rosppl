@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 /************************************************************************
- Copyright (c) 2017, Rethink Robotics
- Copyright (c) 2017, Ian McMahon
+ Copyright (c) 2018, DRONES Lab, University at Buffalo
+ Copyright (c) 2018, Seyed Mahdi Shamsi
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -27,20 +27,160 @@ const rosnodejs = require('rosnodejs');
 // Requires the std_msgs message package
 const std_msgs = rosnodejs.require('std_msgs').msg;
 
-function listener() {
-  // Register node with ROS master
-  rosnodejs.initNode('/listener_node')
-    .then((rosNode) => {
-      // Create ROS subscriber on the 'chatter' topic expecting String messages
-      let sub = rosNode.subscribe('/chatter', std_msgs.String,
-        (data) => { // define callback execution
-          rosnodejs.log.info('I heard: [' + data.data + ']');
-        }
-      );
+const path = require('path');
+const fs = require('fs');
+const util = require('util');
+const shell = require('shelljs');
+//
+const webppl = require('/home/mehdi/ros_ppl/rosppl/src/main');
+const util_wppl = require('/home/mehdi/ros_ppl/rosppl/src/util');
+
+const TOPICS_REFRESH_DELAY_ms = 100;
+
+function getSubValue(object, trace) {
+  let value = object;
+  let keys = trace.split('/')
+
+  for(let i in keys){
+    let keyName = keys[i]
+    
+    if(keyName=='')
+      continue
+
+    value = value[keyName]
+  }
+
+  return value
+} 
+
+function resolveValueName(valueName, callback){
+  shell.exec('rostopic list ', {silent:true}, (code, stdout, stderr)=>{
+    if(code){
+      callback(null)
+      return
+    }
+
+    const topics = stdout.split('\n')
+
+    for(let topicIndex in topics){
+      let topicName = topics[topicIndex];
+      if(topicName!='' && valueName.startsWith(topicName)){
+        callback({
+          topic: topicName,
+          key: valueName.substring(topicName.length)
+        })
+        return
+      }
+    }
+
+    callback(null)
+  })
+}
+
+function getTopicType(topicName){
+  
+  var res = shell.exec('rostopic type ' + topicName, {silent:true})
+
+  if(res.code)
+    return null
+
+  res = res.replace(/\r?\n|\r/g, "");
+  res = res.split('/')
+  return {
+    pkg: res[0],
+    msg: res[1]
+  }
+}
+
+
+function evaluate(object, globalStore) {
+  var output = {}
+  object(globalStore, function(s, k, a){
+    output = {
+      s: s,
+      k: k,
+      a: a
+    }
+  }, '')
+
+  return output
+}
+
+var globalStore = {}
+
+function subscribeValue(nodeHandle, value, callback){
+  let topicName = value.topic;
+  let topicType = getTopicType(topicName);          
+
+  if(!topicType)
+    return
+
+  const topic_msgs = rosnodejs.require(topicType.pkg).msg;
+  let topicMsgType = topic_msgs[topicType.msg];
+
+  let sub = nodeHandle.subscribe(topicName, topicMsgType,
+    (data) => { callback(getSubValue(data, value.key)) });
+}
+
+function registerValue(nodeHandle, valueName, callback){
+  let attempt = function() {
+    // console.log('trying ' + valueName)
+    resolveValueName(valueName, (value)=>{
+      if(value){
+        subscribeValue(nodeHandle, value, callback);
+        console.log(valueName + " connected!");
+      } else {
+        setTimeout(attempt, TOPICS_REFRESH_DELAY_ms)
+      }
+
     });
+  };
+
+  attempt();
+}
+
+function init(rosNode){
+
+  var modelCode = fs.readFileSync('model.wppl', 'utf8');
+  var loopCode = fs.readFileSync('loop.wppl', 'utf8');
+
+  let modelObject = getCompiledObject(modelCode)
+  let modelOutput = evaluate(modelObject, globalStore);
+  globalStore = modelOutput.s;
+
+  let loopObject = getCompiledObject(loopCode)
+
+  if(globalStore.subs){
+    for(let readingName in globalStore.subs) {
+      // Handling the message type
+      let valueName = globalStore.subs[readingName];
+
+      registerValue(rosNode, valueName, (data)=>{
+        // globalStore.readings[readingName] = data;
+        if(globalStore.posterior)
+          globalStore.prior = globalStore.posterior;
+        delete globalStore.posterior;
+        globalStore.readings = {};
+        globalStore.readings[readingName] = data;
+        
+        let result = evaluate(loopObject, globalStore);
+        globalStore = result.s;
+        globalStore.posterior = result.k;
+
+        console.log(globalStore);
+      })
+    }
+  }
+}
+
+
+function main() {
+  // Register node with ROS master
+  rosnodejs.initNode('/rosppl_node')
+    .then(init);    
 }
 
 if (require.main === module) {
   // Invoke Main Listener Function
-  listener();
+  main();
 }

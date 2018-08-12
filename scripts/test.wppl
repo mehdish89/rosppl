@@ -1,0 +1,9 @@
+var model = function(){
+  var coin = flip(0.5)
+  // condition(coin==true)
+  return coin
+}
+
+model()
+
+// Infer(model)

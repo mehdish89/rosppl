@@ -1,10 +1,10 @@
 <?xml version="1.0"?>
 <package>
-  <name>rosnodejs_examples</name>
+  <name>rosppl</name>
   <version>0.0.0</version>
-  <description>The rosnodejs_examples package</description>
+  <description>The rosppl package</description>
 
-  <maintainer email="imcmahon@rethinkrobotics.com">Ian McMahon</maintainer>
+  <maintainer email="seyedmah@buffalo.edu">Seyed Mahdi Shamsi</maintainer>
   <license>Apache 2.0</license>
 
 
@@ -13,7 +13,7 @@
   <!-- Example: -->
   <!-- <url type="website">http://wiki.ros.org/rosnodejs_examples</url> -->
 
-  <author email="imcmahon@rethinkrobotics.com">Ian McMahon</author>
+  <author email="seyedmah@buffalo.edu">Ian McMahon</author>
   <buildtool_depend>catkin</buildtool_depend>
   <run_depend>std_msgs</run_depend>
 
