@@ -31,6 +31,7 @@ const path = require('path');
 const fs = require('fs');
 const util = require('util');
 const shell = require('shelljs');
+
 //
 const webppl = require('/home/mehdi/ros_ppl/rosppl/src/main');
 const util_wppl = require('/home/mehdi/ros_ppl/rosppl/src/util');
@@ -51,6 +52,16 @@ function getSubValue(object, trace) {
   }
 
   return value
+}
+
+function extend(target, object){
+
+  for(const key in object){
+    if(target[key]===undefined || !(object[key] instanceof Object))
+      target[key] = object[key]
+    else 
+      extend(target[key], object[key])
+  }
 } 
 
 function setSubValue(object, trace, data) {
@@ -64,12 +75,15 @@ function setSubValue(object, trace, data) {
       continue
 
     if(i == keys.length-1){
-      value[keyName] = data
-      return
+      extend(value[keyName], data)
+      return object
     }
 
     value = value[keyName]
   }
+
+  extend(object, data)
+  return object
 } 
 
 function resolveValueName(valueName, callback){
@@ -155,9 +169,11 @@ function advertiseValue(nodeHandle, value){
 
   return function(data) {
     var msg = new topicMsgType()
-    setSubValue(msg, value.key, data)
-    console.log(topicName)
-    console.log(msg)
+
+    msg = setSubValue(msg, value.key, data)
+
+    // console.log(topicName)
+    // console.log(msg)
     pub.publish(msg)
   }
 }
@@ -231,12 +247,12 @@ function init(rosNode){
             const publish = globalStore.pubs[key]
             
             if(typeof publish == "function"){
-              console.log(publish+"")
+              // console.log(publish+"")
               publish(globalStore.actions[key])
             }
         }
 
-        console.log(globalStore);
+        // console.log(globalStore);
       })
     }
 

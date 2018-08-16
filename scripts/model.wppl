@@ -1,23 +1,187 @@
-var model = function(readings, prior){
-  var old = prior ? sample(prior) : true
-  
-  if(readings.coin == undefined)
-		return old
+var map0 = {
+	header: {
+		frame_id: "map"
+	},
 
-  var coin = flip(0.5) && old 
-  if(flip(0.8))
-    condition(coin == readings.coin)
-  // console.log(prior)
-  return coin
+	info:{
+		resolution: 0.019999999553,
+		width: 775,
+		height: 746
+	}
 }
 
+
+var toQuaternion = function(e) {
+
+
+		var phi = e.z != undefined ? e.z : 0.; 
+		var theta = e.x != undefined ? e.x : 0.; 
+		var psi = e.y != undefined ? e.y : 0.; 
+
+    var _x = theta * 0.5;
+    var _y = psi * 0.5;
+    var _z = phi * 0.5;
+
+    var cX = Math.cos(_x);
+    var cY = Math.cos(_y);
+    var cZ = Math.cos(_z);
+
+    var sX = Math.sin(_x);
+    var sY = Math.sin(_y);
+    var sZ = Math.sin(_z);
+
+    return {
+      w: cX * cY * cZ - sX * sY * sZ,
+      x: sX * cY * cZ - cX * sY * sZ,
+      y: cX * sY * cZ + sX * cY * sZ,
+      z: cX * cY * sZ + sX * sY * cZ
+    }    
+}
+
+
+var toEuler = function(q){
+  var angle_rad = Math.acos(q.w) * 2;
+  if(angle_rad==0)
+  	return {x: 0, y: 0, z: 0}
+
+  var x = q.x / Math.sin(angle_rad/2);
+  var y = q.y / Math.sin(angle_rad/2);
+  var z = q.z / Math.sin(angle_rad/2);
+
+  return {
+  	x: x,
+  	y: y,
+  	z: z,
+  }
+}
+
+var prior = {
+	// map: extend(map0, {data: zeros([map0.info.width, map0.info.height]).data}),
+
+	header:{
+		frame_id: "map_static"
+	},
+	child_frame_id: "robot0",
+	pose: {
+		position: {
+			x: randomInteger(Math.floor(map0.info.width * map0.info.resolution)),
+			y: randomInteger(Math.floor(map0.info.height * map0.info.resolution)),
+			z: 0,
+		},
+		orientation: toQuaternion({x: 0, y:0, z: 0})
+	}
+}
+
+var  t_noise = {
+	xy: 0.0000001,
+	th: 0.0000001
+}
+
+
+var transition = function(pose, twist, dt) {
+
+  var x = pose.position.x;
+  var y = pose.position.y;
+  var th = toEuler(pose.orientation).z;
+
+  console.log(toEuler(pose.orientation))
+  console.log(x)
+  console.log(y)
+  console.log(th)
+  
+  var v = twist.linear.x;
+  var w = twist.angular.z;
+  
+  var x_new = x + v * dt * Math.cos(th)// + gaussian({mu: 0, sigma: t_noise.xy });
+  var y_new = y + v * dt * Math.sin(th)// + gaussian({mu: 0, sigma: t_noise.xy});
+  var th_new = th + w * dt// + gaussian({mu: 0, sigma: t_noise.th});  
+
+  return extend(pose, {
+  	// header: {
+  	// 	stamp: twist.header.stamp
+  	// },
+  	
+  	position:{
+  		x: x_new,
+  		y: y_new,
+  		z: 0,
+  	},
+  	orientation: toQuaternion({x: 0, y: 0, z: th_new})
+  })
+}
+
+
+var descretize = function(position, resolution){
+	return {
+		x: position.x / resolution,
+		y: position.y / resolution
+	}
+}
+
+var bearing = function(id){
+
+}
+
+var project = function(pose, range, bearing){
+	var th = toEuler(pose.orientation).z
+  var pose = {
+  	x: pose.position.x + range * Math.cos(th + bearing),
+		y: pose.position.y + range * Math.sin(th + bearing)
+	}
+  return descretize(pos, map0.info.resolution)
+}
+
+var observation = function(pose, ranges){
+	mapN(function(id){
+		var pos = project(pose, ranges[id], bearing(id))
+		
+	}, ranges.length)
+}
+
+
+
+var model = function(readings, prior){
+  var last = prior!=undefined ? (typeof prior.support=="function" ? sample(prior) : prior) : {}
+
+  console.log("--------------------------")
+
+  console.log(readings.twist)
+  console.log(last.pose)
+
+  var next = readings.twist!=undefined ? transition(last.pose, readings.twist, 0.1) : last.pose
+
+  // console.log(next.pose)
+
+  return {
+  	pose: next
+  }
+}
+
+var policy = function(posterior){
+	return {
+		odom: {
+			header:{
+				frame_id: "map_static",
+
+			},
+			child_frame_id: "robot0",
+			pose: {pose: MAP(posterior).val.pose}
+
+		}
+	}
+}
+
+
 globalStore.model = model
-globalStore.prior = Bernoulli({p: 0.7})
+globalStore.policy = policy
+globalStore.prior = prior
 
 globalStore.subs = {
-	coin: "/flip/data",
+	twist: "/robot0/cmd_vel",
+	ranges: "/robot0/laser_0/ranges"
 }
 
 globalStore.pubs = {
-	success: "/success/data",
+	map: "/inferred/map",
+	odom: "/inferred/odom"
 }
