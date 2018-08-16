@@ -53,6 +53,25 @@ function getSubValue(object, trace) {
   return value
 } 
 
+function setSubValue(object, trace, data) {
+  let value = object;
+  let keys = trace.split('/')
+
+  for(let i in keys){
+    let keyName = keys[i]
+    
+    if(keyName=='')
+      continue
+
+    if(i == keys.length-1){
+      value[keyName] = data
+      return
+    }
+
+    value = value[keyName]
+  }
+} 
+
 function resolveValueName(valueName, callback){
   shell.exec('rostopic list ', {silent:true}, (code, stdout, stderr)=>{
     if(code){
@@ -122,6 +141,27 @@ function subscribeValue(nodeHandle, value, callback){
     (data) => { callback(getSubValue(data, value.key)) });
 }
 
+function advertiseValue(nodeHandle, value){
+  let topicName = value.topic;
+  let topicType = getTopicType(topicName);          
+
+  if(!topicType)
+    return
+
+  const topic_msgs = rosnodejs.require(topicType.pkg).msg;
+  let topicMsgType = topic_msgs[topicType.msg];
+
+  let pub = nodeHandle.advertise(topicName, topicMsgType);
+
+  return function(data) {
+    var msg = new topicMsgType()
+    setSubValue(msg, value.key, data)
+    console.log(topicName)
+    console.log(msg)
+    pub.publish(msg)
+  }
+}
+
 function registerValue(nodeHandle, valueName, callback){
   let attempt = function() {
     // console.log('trying ' + valueName)
@@ -138,6 +178,26 @@ function registerValue(nodeHandle, valueName, callback){
 
   attempt();
 }
+
+function tryAdvertiseValue(nodeHandle, valueName, callback){
+  let attempt = function() {
+    // console.log('trying ' + valueName)
+    resolveValueName(valueName, (value)=>{
+      if(value){
+        let publish = advertiseValue(nodeHandle, value);
+        callback(publish)
+        console.log(valueName + " connected!");
+      } else {
+        setTimeout(attempt, TOPICS_REFRESH_DELAY_ms)
+      }
+
+    });
+  };
+
+  attempt();
+}
+
+
 
 function init(rosNode){
 
@@ -165,9 +225,27 @@ function init(rosNode){
         
         let result = evaluate(loopObject, globalStore);
         globalStore = result.s;
-        globalStore.posterior = result.k;
+        // globalStore.posterior = result.k;
+
+        for(const key in globalStore.actions){
+            const publish = globalStore.pubs[key]
+            
+            if(typeof publish == "function"){
+              console.log(publish+"")
+              publish(globalStore.actions[key])
+            }
+        }
 
         console.log(globalStore);
+      })
+    }
+
+    for(const actionName in globalStore.pubs) {
+      // Handling the message type
+      const valueName = globalStore.pubs[actionName];
+
+      tryAdvertiseValue(rosNode, valueName, (publish)=>{
+        globalStore.pubs[actionName] = publish
       })
     }
   }
