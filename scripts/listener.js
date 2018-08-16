@@ -31,11 +31,18 @@ const path = require('path');
 const fs = require('fs');
 const util = require('util');
 const shell = require('shelljs');
+
 //
 const webppl = require('/home/mehdi/ros_ppl/rosppl/src/main');
 const util_wppl = require('/home/mehdi/ros_ppl/rosppl/src/util');
 
 const TOPICS_REFRESH_DELAY_ms = 100;
+
+
+var globalStore = {}
+globalStore.packages = {
+  robot: require('/home/mehdi/rosnodejs_ws/src/rosppl/scripts/robot.js')
+}
 
 function getSubValue(object, trace) {
   let value = object;
@@ -51,6 +58,16 @@ function getSubValue(object, trace) {
   }
 
   return value
+}
+
+function extend(target, object){
+
+  for(const key in object){
+    if(target[key]===undefined || !(object[key] instanceof Object))
+      target[key] = object[key]
+    else 
+      extend(target[key], object[key])
+  }
 } 
 
 function setSubValue(object, trace, data) {
@@ -64,12 +81,15 @@ function setSubValue(object, trace, data) {
       continue
 
     if(i == keys.length-1){
-      value[keyName] = data
-      return
+      extend(value[keyName], data)
+      return object
     }
 
     value = value[keyName]
   }
+
+  extend(object, data)
+  return object
 } 
 
 function resolveValueName(valueName, callback){
@@ -125,8 +145,6 @@ function evaluate(object, globalStore) {
   return output
 }
 
-var globalStore = {}
-
 function subscribeValue(nodeHandle, value, callback){
   let topicName = value.topic;
   let topicType = getTopicType(topicName);          
@@ -155,9 +173,11 @@ function advertiseValue(nodeHandle, value){
 
   return function(data) {
     var msg = new topicMsgType()
-    setSubValue(msg, value.key, data)
-    console.log(topicName)
-    console.log(msg)
+
+    msg = setSubValue(msg, value.key, data)
+
+    // console.log(topicName)
+    // console.log(msg)
     pub.publish(msg)
   }
 }
@@ -206,48 +226,57 @@ function init(rosNode){
 
   let modelObject = getCompiledObject(modelCode)
   let modelOutput = evaluate(modelObject, globalStore);
-  globalStore = modelOutput.s;
+  extend(globalStore, modelOutput.s);
 
   let loopObject = getCompiledObject(loopCode)
 
-  if(globalStore.subs){
-    for(let readingName in globalStore.subs) {
-      // Handling the message type
-      let valueName = globalStore.subs[readingName];
+  globalStore.records = {}
 
-      registerValue(rosNode, valueName, (data)=>{
-        // globalStore.readings[readingName] = data;
-        if(globalStore.posterior)
-          globalStore.prior = globalStore.posterior;
-        delete globalStore.posterior;
-        globalStore.readings = {};
-        globalStore.readings[readingName] = data;
-        
-        let result = evaluate(loopObject, globalStore);
-        globalStore = result.s;
-        // globalStore.posterior = result.k;
+  for(let readingName in globalStore.subs) {
+    // Handling the message type
+    let valueName = globalStore.subs[readingName];
 
-        for(const key in globalStore.actions){
-            const publish = globalStore.pubs[key]
-            
-            if(typeof publish == "function"){
-              console.log(publish+"")
-              publish(globalStore.actions[key])
-            }
-        }
+    registerValue(rosNode, valueName, (data)=>{
+      // globalStore.readings[readingName] = data;
+      if(globalStore.posterior)
+        globalStore.prior = globalStore.posterior;
+      delete globalStore.posterior;
+      globalStore.readings = {timestamp_s: Date.now()/1000};
+      globalStore.readings[readingName] = data;
+      
+      let result = evaluate(loopObject, globalStore);
+      globalStore = result.s;
+      // globalStore.posterior = result.k;
 
-        console.log(globalStore);
-      })
-    }
+      for(const key in globalStore.actions){
+          const publish = globalStore.pubs[key]
+          
+          if(typeof publish == "function"){
+            // console.log(publish+"")
+            publish(globalStore.actions[key])
+          }
+      }
 
-    for(const actionName in globalStore.pubs) {
-      // Handling the message type
-      const valueName = globalStore.pubs[actionName];
+      // console.log(globalStore);
+      // console.log(globalStore.records)
+    })
+  }
 
-      tryAdvertiseValue(rosNode, valueName, (publish)=>{
-        globalStore.pubs[actionName] = publish
-      })
-    }
+  for(let readingName in globalStore.reps) {
+    let valueName = globalStore.reps[readingName];
+
+    registerValue(rosNode, valueName, (data)=>{
+      globalStore.records[readingName] = data
+    })
+  }
+
+  for(const actionName in globalStore.pubs) {
+    // Handling the message type
+    const valueName = globalStore.pubs[actionName];
+
+    tryAdvertiseValue(rosNode, valueName, (publish)=>{
+      globalStore.pubs[actionName] = publish
+    })
   }
 }
 

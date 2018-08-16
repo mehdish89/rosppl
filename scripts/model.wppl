@@ -1,23 +1,215 @@
-var model = function(readings, prior){
-  var old = prior ? sample(prior) : true
-  
-  if(readings.coin == undefined)
-		return old
+var robot = globalStore.packages.robot
 
-  var coin = flip(0.5) && old 
-  if(flip(0.8))
-    condition(coin == readings.coin)
-  // console.log(prior)
-  return coin
+var map0 = {
+	header: {
+		frame_id: "map"
+	},
+
+	info:{
+		resolution: 0.019999999553,
+		width: 775,
+		height: 746
+	}
 }
 
+
+var toQuaternion = function(e) {
+
+
+		var phi = e.z != undefined ? e.z : 0.; 
+		var theta = e.x != undefined ? e.x : 0.; 
+		var psi = e.y != undefined ? e.y : 0.; 
+
+    var _x = theta * 0.5;
+    var _y = psi * 0.5;
+    var _z = phi * 0.5;
+
+    var cX = Math.cos(_x);
+    var cY = Math.cos(_y);
+    var cZ = Math.cos(_z);
+
+    var sX = Math.sin(_x);
+    var sY = Math.sin(_y);
+    var sZ = Math.sin(_z);
+
+    var q =  {
+      w: cX * cY * cZ - sX * sY * sZ,
+      x: sX * cY * cZ - cX * sY * sZ,
+      y: cX * sY * cZ + sX * cY * sZ,
+      z: cX * cY * sZ + sX * sY * cZ
+    }   
+
+    return q
+}
+
+
+var toEuler = function(q){
+	const x = q.x
+	const y = q.y
+	const z = q.z
+	const w = q.w
+
+  const t0 = 2.0 * (w * x + y * z);
+  const t1 = 1.0 - 2.0 * (x * x + y * y);
+  const X = Math.atan2(t0, t1);
+
+  var t2 = Math.max(Math.min(2.0 * (w * y - z * x), 1.0), -1.0);
+  const Y = Math.asin(t2);
+
+  const t3 = 2.0 * (w * z + x * y);
+  const t4 = 1.0 - 2.0 * (y * y + z * z);
+  const Z = Math.atan2(t3, t4);
+
+  return {x: X, y: Y, z: Z}
+}
+
+// var prior = {
+// 	// map: extend(map0, {data: zeros([map0.info.width, map0.info.height]).data}),
+// 	pose: {
+// 		position: {
+// 			x: randomInteger(Math.floor(map0.info.width * map0.info.resolution)),
+// 			y: randomInteger(Math.floor(map0.info.height * map0.info.resolution)),
+// 			z: 0,
+// 		},
+// 		orientation: toQuaternion({x: 0, y:0, z: 0})
+// 	}
+// }
+
+var prior = undefined
+
+var  t_noise = {
+	xy: 0.02,
+	th: 0.005
+}
+
+
+var transition = function(pose, twist, dt) {
+
+	// console.log(dt)
+
+  var x = pose.position.x;
+  var y = pose.position.y;
+  var th = toEuler(pose.orientation).z;
+  
+  var v = twist.linear.x;
+  var w = twist.angular.z;
+  
+  var x_new = x + v * dt * Math.cos(th) + gaussian({mu: 0, sigma: t_noise.xy });
+  var y_new = y + v * dt * Math.sin(th) + gaussian({mu: 0, sigma: t_noise.xy});
+  var th_new = th + w * dt + gaussian({mu: 0, sigma: t_noise.th});  
+
+  
+  return extend(pose, {
+  	// header: {
+  	// 	stamp: twist.header.stamp
+  	// },
+  	
+  	position:{
+  		x: x_new,
+  		y: y_new,
+  		z: 0,
+  	},
+  	orientation: toQuaternion({x: 0, y: 0, z: th_new})
+  })
+}
+
+
+var descretize = function(position, resolution){
+	return {
+		x: Math.floor(position.x / resolution),
+		y: Math.floor(position.y / resolution)
+	}
+}
+
+var bearing = function(id){
+	return (id - 667./2) * 2.1 * 2 / 667.
+}
+
+var bearings = mapN(function(i){return bearing(i)}, 667)
+
+var observation = function(pose, ranges, gmap){
+
+
+}
+
+var secs = function(stamp){
+	return stamp.secs + stamp.nsecs * Math.pow(10, -9)
+}
+
+var model = function(readings, records, prior){
+  if(readings.twist==undefined && records.gpose==undefined)
+  	return {}
+
+  var last = prior!=undefined && typeof prior.support=="function" ? sample(prior) : prior
+  
+  var pose = last!=undefined && last.pose!=undefined ? last.pose : records.gpose
+
+  // console.log("--------------------------")
+  // console.log(readings.twist)
+
+  var twist = readings.twist ? readings.twist : records.twist
+
+  var next = twist!=undefined && last!=undefined ? transition(pose, 
+																															twist, 
+																															readings.timestamp_s-last.readings.timestamp_s) : pose
+
+
+  var cost = readings.ranges ? robot.score_ranges_from_grid_map(next, readings.ranges, bearings, records.map) : 0
+
+  console.log(cost)
+
+  factor(-cost)
+
+  // if(readings.ranges){
+  // 	observation(next, readings.ranges, records.map)
+  // }
+
+  
+
+  return {
+  	readings: readings,
+  	pose: next,
+  	// map: new_map,
+  }
+}
+
+var policy = function(posterior){
+	var post = MAP(posterior).val
+	var readings = post.readings
+	// var new_map = readings.ranges ? robot.project_laser_to_grid_map(post.pose, readings.ranges, bearings, map0) : undefined
+
+	var odom = {
+			header:{
+				frame_id: "map_static",
+			},
+			child_frame_id: "robot0",
+			pose: {pose: post.pose}
+	}
+
+	return post.pose!=undefined ? {
+		// map: new_map,
+		odom: odom,		
+	} : {}
+}
+
+
 globalStore.model = model
-globalStore.prior = Bernoulli({p: 0.7})
+globalStore.policy = policy
+globalStore.prior = prior
 
 globalStore.subs = {
-	coin: "/flip/data",
+	twist: "/robot0/cmd_vel",
+	ranges: "/robot0/laser_0/ranges",
+	// gth: "/robot0/odom/pose/pose",
 }
 
 globalStore.pubs = {
-	success: "/success/data",
+	map: "/inferred/map",
+	odom: "/inferred/odom"
+}
+
+globalStore.reps = {
+	map: "/map",
+	twist: "/robot0/cmd_vel",
+	gpose: "/robot0/odom/pose/pose",
 }

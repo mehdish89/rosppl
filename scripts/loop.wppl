@@ -1,19 +1,21 @@
 
-var rInfer = function(readings, model, prior, options){
+var rInfer = function(readings, records, model, prior){
   var bind = function(){
-    return model(readings, prior)
+    return model(readings, records, prior)
   }
 
-  Infer(bind, options)
+  var options = extend(globalStore.options ? globalStore.options : {
+    method: 'MCMC',
+    samples: 10
+  }, {model: bind})
+
+  Infer(options)
 }
 
 
-var options = globalStore.options ? globalStore.options : {
-    method: 'MCMC',
-    samples: 1000
-  }
 
-globalStore.posterior = rInfer(globalStore.readings, globalStore.model, globalStore.prior, options)
+
+globalStore.posterior = rInfer(globalStore.readings, globalStore.records, globalStore.model, globalStore.prior)
 
 
 globalStore.actions = globalStore.policy!= undefined && globalStore.posterior!= undefined ? 
