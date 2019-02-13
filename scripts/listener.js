@@ -184,7 +184,7 @@ function advertiseValue(nodeHandle, value){
 
 function registerValue(nodeHandle, valueName, callback){
   let attempt = function() {
-    // console.log('trying ' + valueName)
+    console.log('trying ' + valueName)
     resolveValueName(valueName, (value)=>{
       if(value){
         subscribeValue(nodeHandle, value, callback);
@@ -217,7 +217,76 @@ function tryAdvertiseValue(nodeHandle, valueName, callback){
   attempt();
 }
 
+function runningInBrowser() {
+  return (typeof window !== 'undefined');
+}
 
+var trampolineRunners = {
+  web: function(yieldEvery) {
+    yieldEvery = yieldEvery || 100;
+    var f = function(t, wrappedF) {
+      var lastPauseTime = Date.now();
+
+      if (f.__cancel__) {
+        f.__cancel__ = false;
+      } else {
+        while (t) {
+          var currTime = Date.now();
+          if (currTime - lastPauseTime > yieldEvery) {
+            // NB: return is crucial here as it exits the while loop
+            // and i'm using return rather than break because we might
+            // one day want to cancel the timer
+            return setTimeout(function() { wrappedF(t, wrappedF); }, 0);
+          } else {
+            t = t();
+          }
+        }
+      }
+    };
+    return f;
+  },
+  cli: function() {
+    return function(t) {
+      while (t) {
+        t = t()
+      }
+    };
+  }
+}
+
+function wrapWithHandler(f, handler) {
+  return function(x, y) {
+    try {
+      return f(x, y);
+    } catch (e) {
+      handler(e);
+    }
+  };
+}
+
+function wrapRunner(baseRunner, handlers) {
+  var wrappedRunner = handlers.reduce(wrapWithHandler, baseRunner);
+  var runner = function(t) { return wrappedRunner(t, runner); };
+  return runner;
+}
+
+function getCompiledObject(code, runnerName) {
+
+  if (runnerName === undefined) {
+    runnerName = runningInBrowser() ? 'web' : 'cli'
+  }
+
+  // On error, throw out the stack. We don't support recovering the
+  // stack from here.
+  var handler = function(error) {
+    throw 'webpplEval error:\n' + error;
+  };
+  var baseRunner = trampolineRunners[runnerName]();
+  var runner = wrapRunner(baseRunner, [handler]);
+
+  var compiledCode = webppl.compile(code, {filename: 'webppl:eval'}).code;
+  return eval.call(global, compiledCode)({})(runner);
+};
 
 function init(rosNode){
 
@@ -238,6 +307,7 @@ function init(rosNode){
 
     registerValue(rosNode, valueName, (data)=>{
       // globalStore.readings[readingName] = data;
+      //console.log("received " + data);
       if(globalStore.posterior)
         globalStore.prior = globalStore.posterior;
       delete globalStore.posterior;

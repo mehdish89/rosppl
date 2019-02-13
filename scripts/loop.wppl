@@ -1,12 +1,13 @@
 
 var rInfer = function(readings, records, model, prior){
+  console.log(globalStore.prior)
   var bind = function(){
     return model(readings, records, prior)
   }
 
   var options = extend(globalStore.options ? globalStore.options : {
     method: 'MCMC',
-    samples: 10
+    samples: 100
   }, {model: bind})
 
   Infer(options)

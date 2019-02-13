@@ -1,4 +1,4 @@
-var model = function(readings, prior){
+var model = function(readings, records, prior){
   var old = prior ? sample(prior) : true
   
   if(readings.coin == undefined)
@@ -7,7 +7,6 @@ var model = function(readings, prior){
   var coin = flip(0.5) && old 
   if(flip(0.8))
     condition(coin == readings.coin)
-  // console.log(prior)
   return coin
 }
 
