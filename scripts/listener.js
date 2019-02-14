@@ -33,15 +33,14 @@ const util = require('util');
 const shell = require('shelljs');
 
 //
-const webppl = require('/home/mehdi/ros_ppl/rosppl/src/main');
-const util_wppl = require('/home/mehdi/ros_ppl/rosppl/src/util');
+const webppl = require('webppl');
 
 const TOPICS_REFRESH_DELAY_ms = 100;
 
 
 var globalStore = {}
 globalStore.packages = {
-  robot: require('/home/mehdi/rosnodejs_ws/src/rosppl/scripts/robot.js')
+  robot: require('./robot.js')
 }
 
 function getSubValue(object, trace) {

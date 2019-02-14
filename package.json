@@ -18,6 +18,10 @@
     "url": "git://github.com/mehdish89/rosppl.git"
   },
   "dependencies": {
-    "rosnodejs": "2.1.1"
+    "ast-types": "^0.12.2",
+    "cjs": "0.0.11",
+    "rosnodejs": "^3.0.0",
+    "shelljs": "^0.8.3",
+    "webppl": "^0.9.14"
   }
 }
