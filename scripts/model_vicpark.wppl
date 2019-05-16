@@ -1,0 +1,237 @@
+var toQuaternion = function(e) {
+
+
+	var phi = e.z != undefined ? e.z : 0.; 
+	var theta = e.x != undefined ? e.x : 0.; 
+	var psi = e.y != undefined ? e.y : 0.; 
+
+    var _x = theta * 0.5;
+    var _y = psi * 0.5;
+    var _z = phi * 0.5;
+
+    var cX = Math.cos(_x);
+    var cY = Math.cos(_y);
+    var cZ = Math.cos(_z);
+
+    var sX = Math.sin(_x);
+    var sY = Math.sin(_y);
+    var sZ = Math.sin(_z);
+
+    var q =  {
+      w: cX * cY * cZ - sX * sY * sZ,
+      x: sX * cY * cZ - cX * sY * sZ,
+      y: cX * sY * cZ + sX * cY * sZ,
+      z: cX * cY * sZ + sX * sY * cZ
+    }   
+
+    return q
+}
+
+
+var secs = function(stamp){
+	return stamp.secs + stamp.nsecs * Math.pow(10, -9)
+}
+
+var L = 2.83
+var H = 0.76
+var b = 0.5
+var a = 3.78
+
+var EPS = 0.1
+
+
+var sig_s = EPS
+var sig_v = EPS
+
+var vicpark_transition = function(state, dr){
+
+	var s = dr.drive.steering_angle + gaussian(0, sig_s)
+	var v = dr.drive.speed / (1 - Math.tan(s) * H / L) + gaussian(0, sig_v)
+
+
+	var dt = state.ts ? secs(dr.header.stamp) - secs(state.ts) : 0.
+
+	var sth = Math.sin(state.theta)
+	var cth = Math.cos(state.theta)
+	var tans = Math.tan(s)
+
+	var x = state.x + dt * (v * cth - v * tans * (a * sth + b * cth) / L)
+	var y = state.y + dt * (v * sth + v * tans * (a * cth - b * sth) / L)
+	var th = (state.theta + dt * v * tans / L) % (2 * Math.PI)
+
+	return {
+		x: x,
+		y: y,
+		theta: th,
+		ts: dr.header.stamp
+	}
+}
+
+var distance = function(a, b){
+	return Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2))
+}
+
+
+var to_landmark = function(pose, tree){
+	var xv = pose.x + a * Math.cos(pose.theta) - b * Math.sin(pose.theta)
+	var yv = pose.y + a * Math.sin(pose.theta) + b * Math.cos(pose.theta)
+
+	return {
+		x: xv + tree.distance * Math.sin(tree.angle + pose.theta),
+		y: yv - tree.distance * Math.cos(tree.angle + pose.theta),
+		d: tree.diameter
+	}
+}
+
+
+var sig_r = EPS
+var sig_b = EPS
+var sig_d = EPS
+
+var vicpark_observer = function(pose, lm) {
+	var xv = pose.x + a * Math.cos(pose.theta) - b * Math.sin(pose.theta)
+	var yv = pose.y + a * Math.sin(pose.theta) + b * Math.cos(pose.theta)
+	var pv = {x: xv, y: yv}
+
+	var mu_r = distance(pv, lm)
+	var mu_b = Math.atan2(pv.y-lm.y, pv.x-lm.x)
+
+	var gauss_r = Gaussian(mu_r, sig_r)
+	var gauss_b = Gaussian(mu_b, sig_b)
+	var gauss_d = Gaussian(lm.d, sig_d)
+ 
+	return function(tree){
+		return gauss_r.score(tree.distance) +
+			   gauss_b.score(tree.angle) +
+			   gauss_d.score(tree.diameter)
+	}
+}
+
+
+var SCORE_THR = -4.0
+var INF_FUNC = function(x){return -Infinity}
+
+var observe_trees = function(state, trees) {
+
+	var observers = map(function(landmark){
+		return vicpark_observer(state.pose, landmark)
+	}, state.landmarks)
+
+	var novels = filter(function(tree){
+
+		var best = reduce(function(observer, acc){
+		
+			return observer(tree) > acc(tree) ? observer : acc
+
+		}, INF_FUNC, observers)
+
+		var best_score = best(tree)
+
+		if(best_score > SCORE_THR){
+			factor(best_score)
+			return false
+		}
+
+		return true
+
+	}, trees)
+
+	return map(to_landmark, novels)
+}
+
+
+var model = function(readings, records, prior){
+
+	var last = prior!=undefined && typeof prior.support=="function" ? sample(prior) : prior
+	
+	var current = readings.dr ? vicpark_transition(last.pose, readings.dr) : last.pose
+
+	var landmarks = readings.trees ? 
+						map(function(tree){
+							return to_landmark(current, tree)
+						}, readings.trees.trees) : last.landmarks
+
+	var fake = {pose: current, landmarks: landmarks}	
+
+	var new_landmarks = readings.trees ? observe_trees(fake, readings.trees.trees) : []
+
+	console.log(new_landmarks)
+
+
+	return { 
+		pose: current,
+		readings: readings, 
+		landmarks: new_landmarks 
+	}
+}
+
+
+
+var policy = function(posterior){
+
+	var last = MAP(posterior).val
+	var pose = last.pose
+	var ts = pose.ts ? pose.ts : {secs: 0, nsecs: 0}
+	var ps = {
+		header: {
+			stamp: ts,
+			frame_id: 'world'
+		},
+
+		pose: {
+			position: {
+				x: pose.x,
+				y: pose.y
+			},
+			orientation: toQuaternion({z: pose.theta})
+		}
+	}
+
+	var odom = {
+		header: {
+			stamp: ts,
+			frame_id: 'world'
+		},
+		child_frame_id: 'odom',
+		pose:{
+			pose: ps.pose
+		}
+	}
+
+
+	return {
+		pose: ps,
+		odom: odom,
+		landmarks: {
+			landmarks: last.landmarks
+		}
+	}
+}
+
+
+globalStore.model = model
+globalStore.policy = policy
+globalStore.prior = {
+	pose: {
+		x: -67.6492,
+		y: -41.7142,
+		theta: 3.3 * Math.PI / 16,
+	}
+}
+
+globalStore.subs = {
+	// twist: "/robot0/cmd_vel",
+	// ranges: "/robot0/laser_0/ranges",
+	// gth: "/robot0/odom/pose/pose",
+	dr: "/dead_reckoning",
+	trees: "/trees"
+}
+
+globalStore.pubs = {
+	pose: "/pose",
+	odom: "/odom",
+	landmarks: "/landmarks",
+}
+
+globalStore.reps = {
+}

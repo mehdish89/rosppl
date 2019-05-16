@@ -289,7 +289,7 @@ function getCompiledObject(code, runnerName) {
 
 function init(rosNode){
 
-  var modelCode = fs.readFileSync('model.wppl', 'utf8');
+  var modelCode = fs.readFileSync('model_vicpark.wppl', 'utf8');
   var loopCode = fs.readFileSync('loop.wppl', 'utf8');
 
   let modelObject = getCompiledObject(modelCode)

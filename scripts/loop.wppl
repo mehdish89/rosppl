@@ -1,6 +1,6 @@
 
 var rInfer = function(readings, records, model, prior){
-  console.log(globalStore.prior)
+  // console.log(globalStore.prior)
   var bind = function(){
     return model(readings, records, prior)
   }
