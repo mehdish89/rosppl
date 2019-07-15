@@ -312,9 +312,19 @@ function init(rosNode){
       delete globalStore.posterior;
       globalStore.readings = {timestamp_s: Date.now()/1000};
       globalStore.readings[readingName] = data;
+
+      globalStore._sumW = 0.
+      globalStore._numFactorCalls = 0.
+
+      global.count = 0.
       
       let result = evaluate(loopObject, globalStore);
       globalStore = result.s;
+
+      // console.log("sumW = " + s._sumW)
+      // console.log("numFactorCalls = " + s._numFactorCalls)
+
+
       // globalStore.posterior = result.k;
 
       for(const key in globalStore.actions){

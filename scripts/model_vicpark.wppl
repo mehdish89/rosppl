@@ -40,8 +40,8 @@ var a = 3.78
 var EPS = 0.1
 
 
-var sig_s = EPS
-var sig_v = EPS
+var sig_s = 10 * Math.PI / 180
+var sig_v = 0.1
 
 var vicpark_transition = function(state, dr){
 
@@ -53,10 +53,15 @@ var vicpark_transition = function(state, dr){
 
 	var sth = Math.sin(state.theta)
 	var cth = Math.cos(state.theta)
+	var tanth = Math.tan(state.theta)
 	var tans = Math.tan(s)
 
 	var x = state.x + dt * (v * cth - v * tans * (a * sth + b * cth) / L)
 	var y = state.y + dt * (v * sth + v * tans * (a * cth - b * sth) / L)
+
+	// var x = state.x + dt * (v * cth)
+	// var y = state.y + dt * (v * sth)
+
 	var th = (state.theta + dt * v * tans / L) % (2 * Math.PI)
 
 	return {
@@ -84,26 +89,36 @@ var to_landmark = function(pose, tree){
 }
 
 
-var sig_r = EPS
-var sig_b = EPS
-var sig_d = EPS
+var sig_r = 0.005
+var sig_b = 2 * Math.PI / 180
+var sig_d = 0.00000001
 
 var vicpark_observer = function(pose, lm) {
-	var xv = pose.x + a * Math.cos(pose.theta) - b * Math.sin(pose.theta)
-	var yv = pose.y + a * Math.sin(pose.theta) + b * Math.cos(pose.theta)
+	// var xv = pose.x + a * Math.cos(pose.theta) - b * Math.sin(pose.theta)
+	// var yv = pose.y + a * Math.sin(pose.theta) + b * Math.cos(pose.theta)
+
+	var xv = pose.x 
+	var yv = pose.y
+
 	var pv = {x: xv, y: yv}
 
 	var mu_r = distance(pv, lm)
 	var mu_b = Math.atan2(pv.y-lm.y, pv.x-lm.x)
 
-	var gauss_r = Gaussian(mu_r, sig_r)
-	var gauss_b = Gaussian(mu_b, sig_b)
-	var gauss_d = Gaussian(lm.d, sig_d)
+
+
+	var gauss_r = Gaussian({mu: mu_r, sigma: sig_r})
+	var gauss_b = Gaussian({mu: mu_b, sigma: sig_b})
+	// var gauss_d = Gaussian({mu: lm.d, sigma: sig_d})
  
 	return function(tree){
+		// console.log(mu_r + " -- " + tree.distance)
+		// console.log(mu_b + " -- " + tree.angle)
+
 		return gauss_r.score(tree.distance) +
-			   gauss_b.score(tree.angle) +
-			   gauss_d.score(tree.diameter)
+			   gauss_b.score(tree.angle) 
+			   // +
+			   // gauss_d.score(tree.diameter)
 	}
 }
 
@@ -139,38 +154,69 @@ var observe_trees = function(state, trees) {
 	return map(to_landmark, novels)
 }
 
+var myfactor = function(score){
+	var sumW = globalStore._sumW
+	var numFactorCalls = globalStore._numFactorCalls
+	globalStore._sumW = (_sumW * numFactorCalls + score) / (numFactorCalls + 1)
+    globalStore._numFactorCalls = numFactorCalls + 1
+
+    factor(score)
+
+    // console.log(globalStore._sumW)
+}
+
 
 var model = function(readings, records, prior){
 
 	var last = prior!=undefined && typeof prior.support=="function" ? sample(prior) : prior
+	// var last = prior!=undefined && typeof prior.support=="function" ? MAP(prior).val : prior
+
 	
 	var current = readings.dr ? vicpark_transition(last.pose, readings.dr) : last.pose
 
-	var landmarks = readings.trees ? 
-						map(function(tree){
-							return to_landmark(current, tree)
-						}, readings.trees.trees) : last.landmarks
 
-	var fake = {pose: current, landmarks: landmarks}	
+	if(readings.trees && records.map)
+		map(function(tree){
 
-	var new_landmarks = readings.trees ? observe_trees(fake, readings.trees.trees) : []
+			var observer = vicpark_observer(current, records.map.landmarks[tree.id-1])
+			var score = observer(tree)
+			// console.log(score)
+			factor(score)
+		}, readings.trees.trees)
 
-	console.log(new_landmarks)
+
+	// var landmarks = readings.trees ? 
+	// 					map(function(tree){
+	// 						return to_landmark(current, tree)
+	// 					}, readings.trees.trees) : last.landmarks
+
+	// var fake = {pose: current, landmarks: landmarks}	
+
+	// var new_landmarks = readings.trees ? observe_trees(fake, readings.trees.trees) : []
+
+	// console.log(new_landmarks)
 
 
 	return { 
 		pose: current,
 		readings: readings, 
-		landmarks: new_landmarks 
+		// landmarks: new_landmarks 
 	}
 }
 
 
+var pose_expectation = function(dist){
+	return {
+		x: expectation(dist, function(p){p.pose.x}),
+		y: expectation(dist, function(p){p.pose.y}),
+		theta: expectation(dist, function(p){p.pose.theta}),
+		ts: MAP(dist).val.pose.ts,
+	}
+}
 
 var policy = function(posterior){
-
 	var last = MAP(posterior).val
-	var pose = last.pose
+	var pose = pose_expectation(posterior)
 	var ts = pose.ts ? pose.ts : {secs: 0, nsecs: 0}
 	var ps = {
 		header: {
@@ -230,8 +276,9 @@ globalStore.subs = {
 globalStore.pubs = {
 	pose: "/pose",
 	odom: "/odom",
-	landmarks: "/landmarks",
+	// landmarks: "/landmarks",
 }
 
 globalStore.reps = {
+	map: "/map",
 }

@@ -7,13 +7,12 @@ var rInfer = function(readings, records, model, prior){
 
   var options = extend(globalStore.options ? globalStore.options : {
     method: 'MCMC',
-    samples: 100
+    samples: 100,
+    // onlyMAP: true,
   }, {model: bind})
 
   Infer(options)
 }
-
-
 
 
 globalStore.posterior = rInfer(globalStore.readings, globalStore.records, globalStore.model, globalStore.prior)
