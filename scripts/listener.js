@@ -287,10 +287,27 @@ function getCompiledObject(code, runnerName) {
   return eval.call(global, compiledCode)({})(runner);
 };
 
-function init(rosNode){
+function getParamSync(nh, param){
+  var path = ''
+  var isFinished = false
 
-  var modelCode = fs.readFileSync('model_vicpark.wppl', 'utf8');
-  var loopCode = fs.readFileSync('loop.wppl', 'utf8');
+  nh.getParam(param).then((val) => {
+    path = val;
+    isFinished = true;
+  });
+
+  
+
+  return path
+}
+
+function init(rosNode, path){
+
+  console.log(">>>>>>>"+path)
+  
+
+  var modelCode = fs.readFileSync(path+'model_vicpark.wppl', 'utf8');
+  var loopCode = fs.readFileSync(path+'loop.wppl', 'utf8');
 
   let modelObject = getCompiledObject(modelCode)
   let modelOutput = evaluate(modelObject, globalStore);
@@ -363,7 +380,11 @@ function init(rosNode){
 function main() {
   // Register node with ROS master
   rosnodejs.initNode('/rosppl_node')
-    .then(init);    
+    .then((nh) => {
+      nh.getParam('webppl_path').then((path) => {
+        init(nh, path)
+      });
+    });    
 }
 
 if (require.main === module) {

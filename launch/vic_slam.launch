@@ -1,0 +1,20 @@
+<launch>
+
+	<arg name="speed" default="1." />
+
+	<arg name="path" default="$(find rosppl)/../vicpark/" />
+	<arg name="bagfile" default="normal.bag" />
+
+	<param name="webppl_path" value="$(find rosppl)/scripts/" />
+
+	<node name="rosppl_node" pkg="rosppl" type="listener.js" respawn="true" output="screen"/>
+	<node name="vicpark_publish" pkg="rosppl" type="vicpark_trees_publish.py" respawn="true" />
+	
+	<node pkg="rosbag" type="play" name="vicpark_bag_player_required" respawn="true"
+		  args="--clock $(arg path)$(arg bagfile) -r $(arg speed) --wait-for-subscribers --topics /map /trees /dead_reckoning /ground_truth_odom" />
+	
+	<!-- <node pkg="rosbag" type="play" name="vicpark_bag_player_optional" output="screen" 
+		args="$(arg path)$(arg bagfile) - -pause-topics /maps /trees /dead_reckoning" /> -->
+	
+	<node pkg="rviz" type="rviz" name="visualization" args="-d $(find rosppl)/scripts/config.rviz" />
+</launch>
