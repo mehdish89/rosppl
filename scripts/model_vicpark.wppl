@@ -32,10 +32,10 @@ var secs = function(stamp){
 	return stamp.secs + stamp.nsecs * Math.pow(10, -9)
 }
 
-var L = 2.83
-var H = 0.76
-var b = 0.5
-var a = 3.78
+// var L = 2.83
+// var H = 0.76
+// var b = 0.5
+// var a = 3.78
 
 var EPS = 0.1
 
@@ -43,10 +43,14 @@ var EPS = 0.1
 var sig_s = 5 * Math.PI / 180
 var sig_v = 0.1
 
-var vicpark_transition = function(state, dr){
+var vicpark_transition = function(state, dr, params){
+	var L = params.L
+	var H = params.H
+	var b = params.b
+	var a = params.a
 
-	var s = dr.drive.steering_angle + gaussian(0, sig_s)
-	var v = dr.drive.speed / (1 - Math.tan(s) * H / L) + gaussian(0, sig_v)
+	var s = dr.drive.steering_angle + gaussian(0, params.sig_s)
+	var v = dr.drive.speed / (1 - Math.tan(s) * H / L) + gaussian(0, params.sig_v)
 
 
 	var dt = state.ts ? secs(dr.header.stamp) - secs(state.ts) : 0.
@@ -93,9 +97,11 @@ var sig_r = 0.005
 var sig_b = 2 * Math.PI / 180
 var sig_d = 0.00000001
 
-var vicpark_observer = function(pose, lm) {
+var vicpark_observer = function(pose, lm, params) {
 	// var xv = pose.x + a * Math.cos(pose.theta) - b * Math.sin(pose.theta)
 	// var yv = pose.y + a * Math.sin(pose.theta) + b * Math.cos(pose.theta)
+	var sig_r = params.sig_r
+	var sig_b = params.sig_b
 
 	var xv = pose.x 
 	var yv = pose.y
@@ -166,22 +172,36 @@ var myfactor = function(score){
 }
 
 
-var model = function(readings, records, prior){
+var pose_expectation = function(dist){
+	return {
+		x: expectation(dist, function(p){p.pose.x}),
+		y: expectation(dist, function(p){p.pose.y}),
+		theta: expectation(dist, function(p){p.pose.theta}),
+		ts: MAP(dist).val.pose.ts,
+	}
+}
+
+
+var model = function(readings, records, prior, params){
 
 	var last = prior!=undefined && typeof prior.support=="function" ? sample(prior) : prior
 	// var last = prior!=undefined && typeof prior.support=="function" ? MAP(prior).val : prior
 
+	condition(params.sig_s>0 && params.sig_v>0)
+
+	// var current = readings.dr ? vicpark_transition(last.pose, readings.dr, params) : last.pose
+	var current = records.dr ? vicpark_transition(last.pose, records.dr, params) : last.pose
+
 	
-	var current = readings.dr ? vicpark_transition(last.pose, readings.dr) : last.pose
 
 
 	if(readings.trees && records.map)
 		map(function(tree){
 
-			var observer = vicpark_observer(current, records.map.landmarks[tree.id-1])
+			var observer = vicpark_observer(current, records.map.landmarks[tree.id-1], params)
 			var score = observer(tree)
 			// console.log(score)
-			console.log("landmark "+tree.id)
+			// console.log("landmark "+tree.id)
 			factor(score)
 		}, readings.trees.trees)
 
@@ -202,16 +222,6 @@ var model = function(readings, records, prior){
 		pose: current,
 		readings: readings, 
 		// landmarks: new_landmarks 
-	}
-}
-
-
-var pose_expectation = function(dist){
-	return {
-		x: expectation(dist, function(p){p.pose.x}),
-		y: expectation(dist, function(p){p.pose.y}),
-		theta: expectation(dist, function(p){p.pose.theta}),
-		ts: MAP(dist).val.pose.ts,
 	}
 }
 
@@ -270,7 +280,7 @@ globalStore.subs = {
 	// twist: "/robot0/cmd_vel",
 	// ranges: "/robot0/laser_0/ranges",
 	// gth: "/robot0/odom/pose/pose",
-	dr: "/dead_reckoning",
+	// dr: "/dead_reckoning",
 	trees: "/trees"
 }
 
@@ -282,4 +292,31 @@ globalStore.pubs = {
 
 globalStore.reps = {
 	map: "/map",
+	dr: "/dead_reckoning",
 }
+
+globalStore.params = {
+	// sig_s: Gaussian({mu: 1, sigma: 1}),//*/ 0.016, // 5 * Math.PI / 180,
+	// sig_v: Gaussian({mu: 1, sigma: 1}),//*/ 0.16   // 0.1,
+
+	sig_s: Gamma({shape: 1, scale: 1}),//*/ 0.016, // 5 * Math.PI / 180,
+	sig_v: Gamma({shape: 1, scale: 1}),//*/ 0.16,   // 0.1,
+	sig_r: /*Gamma({shape: 1, scale: 1}), //*/  0.28, //0.12, //0.005,
+	sig_b: /*Gamma({shape: 1, scale: 1}), //*/  0.012, //2 * Math.PI / 180,
+
+	L: /*Gamma({shape: 1, scale: 1}),//*/ 2.83, // 5 * Math.PI / 180,
+	H: /*Gamma({shape: 1, scale: 1}), //*/  0.76,
+	b: /*Gamma({shape: 1, scale: 1}), //*/  0.5,
+	a: /*Gamma({shape: 1, scale: 1}), //*/  3.78,
+
+	true_sig_s: /*Gamma({shape: 1, scale: 1}),//*/ 0.016, // 5 * Math.PI / 180,
+	true_sig_v: /*Gamma({shape: 1, scale: 1}),//*/ 0.2,   // 0.1,
+	true_sig_r: /*Gamma({shape: 1, scale: 1}), //*/  0.28, //0.005,
+	true_sig_b: /*Gamma({shape: 1, scale: 1}), //*/  0.012, //2 * Math.PI / 180,
+
+	true_L: /*Gamma({shape: 1, scale: 1}),//*/ 2.83, // 5 * Math.PI / 180,
+	true_H: /*Gamma({shape: 1, scale: 1}), //*/  0.76,
+	true_b: /*Gamma({shape: 1, scale: 1}), //*/  0.5,
+	true_a: /*Gamma({shape: 1, scale: 1}), //*/  3.78,
+}
+

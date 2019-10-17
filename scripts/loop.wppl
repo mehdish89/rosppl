@@ -1,13 +1,82 @@
 
-var rInfer = function(readings, records, model, prior){
+var sampleAll = function(obj){
+  if(dists.isDist(obj))
+    return sample(obj)
+  
+  if(Array.isArray(obj))
+    return map(sampleAll, obj)
+
+  if(obj instanceof Object)
+    return mapObject(function(a, b){
+      return sampleAll(b)
+    }, obj)
+
+  return obj
+}
+
+var exploreAll = function(obj){
+  if(dists.isDist(obj)){
+    var s = uniform(0.001, 2.)
+    // condition(Math.exp(obj.score(s))<0.02)
+    observe(obj, s)
+    return s
+  }
+  
+  if(Array.isArray(obj))
+    return map(exploreAll, obj)
+
+  if(obj instanceof Object)
+    return mapObject(function(a, b){
+      return exploreAll(b)
+    }, obj)
+
+  return obj
+}
+
+
+// globalStore.params = {x: Gaussian({mu: 10, sigma: 20})}
+// var tmp = {x: Gaussian({mu: 10, sigma: 20})}
+// console.log(globalStore.params)
+
+
+var pInfer = function(readings, records, model, prior){
   // console.log(globalStore.prior)
   var bind = function(){
-    return model(readings, records, prior)
+    var params = flip(0.97) ? sampleAll(globalStore.params) : exploreAll(globalStore.params)
+    // var params = sampleAll(globalStore.params)
+
+    model(readings, records, prior, params)
+    return params
   }
 
   var options = extend(globalStore.options ? globalStore.options : {
     method: 'MCMC',
-    samples: 100,
+    samples: 1000,
+    // onlyMAP: true,
+  }, {model: bind})
+
+  Infer(options)
+}
+
+if(globalStore.params && globalStore.readings.trees){
+  globalStore.inferredParams = pInfer(globalStore.readings, globalStore.records, globalStore.model, globalStore.prior)
+}
+
+// console.log(tmp.x.refit(globalStore.params, function(x){x.x}))
+
+
+var rInfer = function(readings, records, model, prior){
+  // console.log(globalStore.prior)
+  var bind = function(){  
+    // var params = MAP(globalStore.params).val
+    var params = sampleAll(globalStore.params)
+
+    return model(readings, records, prior, params)
+  }
+
+  var options = extend(globalStore.options ? globalStore.options : {
+    method: 'MCMC',
+    samples: 1000,
     // onlyMAP: true,
   }, {model: bind})
 
@@ -15,8 +84,19 @@ var rInfer = function(readings, records, model, prior){
 }
 
 
+
+
+// globalStore.params =  
+
 globalStore.posterior = rInfer(globalStore.readings, globalStore.records, globalStore.model, globalStore.prior)
 
+globalStore.params = dists.parameterize(globalStore.inferredParams, globalStore.params)
+
+console.log("*******************************")
+console.log(globalStore.params)
+console.log("*******************************")
 
 globalStore.actions = globalStore.policy!= undefined && globalStore.posterior!= undefined ? 
 							eval.call({}, globalStore.policy)(globalStore.posterior) : {}
+
+

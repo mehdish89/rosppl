@@ -317,6 +317,8 @@ function init(rosNode, path){
 
   globalStore.records = {}
 
+  let paramsPub = rosNode.advertise('/params', std_msgs.String);
+
   for(let readingName in globalStore.subs) {
     // Handling the message type
     let valueName = globalStore.subs[readingName];
@@ -337,6 +339,10 @@ function init(rosNode, path){
       
       let result = evaluate(loopObject, globalStore);
       globalStore = result.s;
+
+      let params = JSON.stringify(globalStore.params)
+      paramsPub.publish({data: params})
+
 
       // console.log("sumW = " + s._sumW)
       // console.log("numFactorCalls = " + s._numFactorCalls)
