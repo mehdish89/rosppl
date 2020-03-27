@@ -1,0 +1,41 @@
+<launch>
+
+	
+
+	<arg name="model_path" default="/home/mehdi/catkin_ws/src/gazebo_inverted_pendulum" />
+	<arg name="gazebo" default="false" />
+
+	<env name="GAZEBO_PLUGIN_PATH" value="$(arg model_path)/pendulum_plugin"/>
+
+	<param name="webppl_path" value="$(find rosppl)/scripts/" />
+	<!-- <param name="model_file" value="model_inverted_pendulum.wppl" /> -->
+	<param name="model_file" value="model_inverted_pendulum_lqg.wppl" />
+
+	<param name="use_sim_time" value="true" />
+
+
+	<!-- <node name="save_params" pkg="rosppl" type="save_params_history.py"  respawn="false" /> -->
+	<!-- if="$(eval saveparams == 'true')" -->
+
+	<node name="rosppl_node" pkg="rosppl"  type="listener.js" launch-prefix="taskset -c 1" respawn="true" output="screen"/>
+
+	<node name="gazeboros" pkg="gazebo_ros" type="gazebo" required="true" output="screen" args="$(arg model_path)/inverted_pendulum.world --verbose -u "/>
+	<!-- use kill -9 $(ps aux | grep '[l]ibgazebo_ros' | awk '{print $2}') to kill it-->
+
+	<!-- <node name="vicpark_publish" pkg="rosppl" type="vicpark_trees_publish.py" respawn="true" /> -->
+	
+	<!-- <node pkg="rosbag" type="play" name="vicpark_bag_player_required" respawn="true"
+		  args="-##-clock $(arg path)$(arg bagfile) -r $(arg speed) -##-wait-for-subscribers -##-topics /map /trees /dead_reckoning /ground_truth_odom /parameters/sig_r_true /parameters/sig_b_true /parameters/sig_s_true /parameters/sig_v_true"  /> -->
+
+	<!-- <node pkg="rostopic" type="rostopic" name="$(anon nowait_topic_1)" args="echo /parameters/sig_r_true" />
+	<node pkg="rostopic" type="rostopic" name="$(anon nowait_topic_2)" args="echo /parameters/sig_b_true" />
+	<node pkg="rostopic" type="rostopic" name="$(anon nowait_topic_3)" args="echo /parameters/sig_v_true" />
+	<node pkg="rostopic" type="rostopic" name="$(anon nowait_topic_4)" args="echo /parameters/sig_s_true" /> -->
+
+
+	
+	<!-- <node pkg="rosbag" type="play" name="vicpark_bag_player_optional" output="screen" 
+		args="$(arg path)$(arg bagfile) - -pause-topics /maps /trees /dead_reckoning" /> -->
+	
+	<!-- <node pkg="rviz" type="rviz" name="visualization" args="-d $(find rosppl)/scripts/config.rviz" /> -->
+</launch>

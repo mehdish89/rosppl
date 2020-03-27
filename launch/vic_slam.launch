@@ -7,6 +7,8 @@
 	<arg name="bagfile" default="normal.bag" />
 
 	<param name="webppl_path" value="$(find rosppl)/scripts/" />
+	<param name="model_file" value="model_vicpark.wppl" />
+
 
 	<!-- <node name="save_params" pkg="rosppl" type="save_params_history.py"  respawn="false" /> -->
 	<!-- if="$(eval saveparams == 'true')" -->

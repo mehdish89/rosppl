@@ -1,0 +1,141 @@
+
+var draw_from = function(prior){
+	return prior!=undefined && typeof prior.support=="function" ? sample(prior) : prior
+}
+
+var secs = function(stamp){
+	return stamp.secs + stamp.nsecs * Math.pow(10, -9)
+}
+
+var stamp = function(secs){
+	return {
+		secs: Math.floor(secs),
+		nsecs: (secs%1) * Math.pow(10, 9)
+	}
+}
+
+var model = function(readings, records, prior, params){
+
+	var last = draw_from(prior)
+
+	var g = params.g;
+	var M = params.M;
+	var m = params.m;
+	var l = params.l;
+
+		
+	var transition = function(X, u_0, dt) {
+
+		var u = u_0 ? u_0 : 0.
+		// gaussian(u_0, 5)
+
+		var th = X.th//X[0];
+		var dth = X.dth //X[1];
+		var x = X.x //X[2];
+		var dx = X.dx //X[3];
+		var cos = Math.cos(th);
+		var sin = Math.sin(th);
+
+		var f1 = dth;
+		var f2 =
+			(u * cos - (M + m) * g * sin + m * l * cos * sin * dth * dth) /
+			(m * l * cos * cos - M * l - m * l);
+
+		var f3 = dx;
+		var f4 =
+			(u + m * l * sin * dth * dth - m * g * cos * sin) /
+			(M + m - m * cos * cos);
+
+
+		return {
+			th: th + f1 * dt, 
+			dth: dth + f2 * dt + gaussian(0, 0.1), 
+			x: x + f3 * dt, 
+			dx: dx + f4 * dt + gaussian(0, 0.25),
+		};
+	}
+
+
+
+	var ts = secs(readings.js.header.stamp)
+	var dt =  ts - last.ts
+	var X = dt > 0 ? transition(last.X, records.fc, dt) : last.X
+	
+	observe(Gaussian({mu: X.dth, sigma: 0.1}), readings.js.velocity[0])
+	observe(Gaussian({mu: X.th, sigma: 0.1}), readings.js.position[0])
+
+
+	return {
+		X: X,
+		ts: ts,
+	}
+}
+
+var policy = function(posterior){
+	var last = MAP(posterior).val
+	// console.log(stamp(last.ts))
+
+	return {
+		js: {
+			header:{
+				stamp: stamp(last.ts)
+			},
+			name: ['pendulum_pivot'],
+			position: [(last.X.th)/*%(2*Math.PI)*/],
+			velocity: [last.X.dth],
+			effort: [0.],
+		}
+	}	
+}
+
+var model0 = function(readings, records, prior, params){
+	return prior
+}
+
+var policy0 = function(posterior){
+
+	return {}
+}
+
+
+globalStore.model = model
+globalStore.policy = policy
+globalStore.prior = {
+	X: {
+		th: 0.,
+		dth: 0.,
+		x: 0.,
+		dx: 0.,
+	},
+	ts: 9999999999,
+}
+
+globalStore.subs = {
+	js: "/pendulum_cart/joint_state",
+}
+
+globalStore.pubs = {
+	js: {
+		topic: "/pendulum_cart/inferred_joint_state",
+		type: "sensor_msgs/JointState",
+	}
+}
+
+globalStore.reps = {
+	fc: "/pendulum_cart/force_command/data",
+}
+
+globalStore.params = {
+	m: 1,
+	// m: Gamma({shape: 6, scale: 2}),
+	M: 10,
+	r: 0.05,
+	g: 9.8,
+	l: 1.,
+
+	// l: Gamma({shape: 6, scale: 2}),
+	// l: Gaussian({mu: 5, sigma: 5}),
+}
+
+console.log('model file is executed')
+

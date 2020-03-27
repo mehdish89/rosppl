@@ -36,7 +36,7 @@ var exploreAll = function(obj){
 
 // globalStore.params = {x: Gaussian({mu: 10, sigma: 20})}
 // var tmp = {x: Gaussian({mu: 10, sigma: 20})}
-// console.log(globalStore.params)
+// console.log(globalStore.prior)
 
 
 var pInfer = function(readings, records, model, prior){
@@ -55,10 +55,11 @@ var pInfer = function(readings, records, model, prior){
     // onlyMAP: true,
   }, {model: bind})
 
+
   Infer(options)
 }
 
-if(globalStore.params && globalStore.readings.trees){
+if(globalStore.params /*&& globalStore.options && globalStore.options["param_infer"] || globalStore.readings.trees*/){
   globalStore.inferredParams = pInfer(globalStore.readings, globalStore.records, globalStore.model, globalStore.prior)
 }
 
@@ -94,7 +95,10 @@ globalStore.params = dists.parameterize(globalStore.inferredParams, globalStore.
 
 console.log("*******************************")
 console.log(globalStore.params)
+// console.log(globalStore)
 console.log("*******************************")
+// console.log(globalStore.posterior)
+// console.log("*******************************")
 
 globalStore.actions = globalStore.policy!= undefined && globalStore.posterior!= undefined ? 
 							eval.call({}, globalStore.policy)(globalStore.posterior) : {}

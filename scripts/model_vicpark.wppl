@@ -281,7 +281,7 @@ globalStore.subs = {
 	// ranges: "/robot0/laser_0/ranges",
 	// gth: "/robot0/odom/pose/pose",
 	// dr: "/dead_reckoning",
-	trees: "/trees"
+	trees: "/trees",
 }
 
 globalStore.pubs = {
@@ -319,4 +319,8 @@ globalStore.params = {
 	true_b: /*Gamma({shape: 1, scale: 1}), //*/  0.5,
 	true_a: /*Gamma({shape: 1, scale: 1}), //*/  3.78,
 }
+
+// globalStore.options = {
+// 	param_infer: true,
+// }
 

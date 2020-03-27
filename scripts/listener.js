@@ -89,9 +89,35 @@ function setSubValue(object, trace, data) {
 
   extend(object, data)
   return object
-} 
+}
+
+
+function getTopicType(topic){
+  
+  var res = (typeof topic=='object' && 'type' in topic) ? topic.type : shell.exec('rostopic type ' + topic, {silent:true})
+
+  if(typeof res=='object' && res.code)
+    return null
+
+  res = res.replace(/\r?\n|\r/g, "");
+  res = res.split('/')
+
+  const topic_msgs = rosnodejs.require(res[0]).msg;
+  let topicMsgType = topic_msgs[res[1]];
+
+  return topicMsgType
+}
+
 
 function resolveValueName(valueName, callback){
+  if(typeof valueName=="object" && 
+    ['topic', 'type'].every((x)=>(x in valueName))){
+    let topicInfo = Object.assign({key:''}, valueName)
+    Object.assign(topicInfo, {type: getTopicType(valueName)})
+    callback(topicInfo)
+    return
+  }
+
   shell.exec('rostopic list ', {silent:true}, (code, stdout, stderr)=>{
     if(code){
       callback(null)
@@ -105,7 +131,8 @@ function resolveValueName(valueName, callback){
       if(topicName!='' && valueName.startsWith(topicName)){
         callback({
           topic: topicName,
-          key: valueName.substring(topicName.length)
+          key: valueName.substring(topicName.length),
+          type: getTopicType(topicName)
         })
         return
       }
@@ -113,21 +140,6 @@ function resolveValueName(valueName, callback){
 
     callback(null)
   })
-}
-
-function getTopicType(topicName){
-  
-  var res = shell.exec('rostopic type ' + topicName, {silent:true})
-
-  if(res.code)
-    return null
-
-  res = res.replace(/\r?\n|\r/g, "");
-  res = res.split('/')
-  return {
-    pkg: res[0],
-    msg: res[1]
-  }
 }
 
 
@@ -146,37 +158,28 @@ function evaluate(object, globalStore) {
 
 function subscribeValue(nodeHandle, value, callback){
   let topicName = value.topic;
-  let topicType = getTopicType(topicName);          
+  let topicType = ('type' in value) ? value.type : getTopicType(value);
 
   if(!topicType)
     return
 
-  const topic_msgs = rosnodejs.require(topicType.pkg).msg;
-  let topicMsgType = topic_msgs[topicType.msg];
-
-  let sub = nodeHandle.subscribe(topicName, topicMsgType,
+  let sub = nodeHandle.subscribe(topicName, topicType,
     (data) => { callback(getSubValue(data, value.key)) });
 }
 
 function advertiseValue(nodeHandle, value){
   let topicName = value.topic;
-  let topicType = getTopicType(topicName);          
+  let topicType = ('type' in value) ? value.type : getTopicType(value);
 
   if(!topicType)
     return
 
-  const topic_msgs = rosnodejs.require(topicType.pkg).msg;
-  let topicMsgType = topic_msgs[topicType.msg];
-
-  let pub = nodeHandle.advertise(topicName, topicMsgType);
+  let pub = nodeHandle.advertise(topicName, topicType);
 
   return function(data) {
-    var msg = new topicMsgType()
+    var msg = new topicType()
 
     msg = setSubValue(msg, value.key, data)
-
-    // console.log(topicName)
-    // console.log(msg)
     pub.publish(msg)
   }
 }
@@ -205,7 +208,7 @@ function tryAdvertiseValue(nodeHandle, valueName, callback){
       if(value){
         let publish = advertiseValue(nodeHandle, value);
         callback(publish)
-        console.log(valueName + " connected!");
+        console.log(value.topic + " advertised!");
       } else {
         setTimeout(attempt, TOPICS_REFRESH_DELAY_ms)
       }
@@ -301,12 +304,12 @@ function getParamSync(nh, param){
   return path
 }
 
-function init(rosNode, path){
+function init(rosNode, path, filename='model_vicpark.wppl'){
 
   console.log(">>>>>>>"+path)
   
 
-  var modelCode = fs.readFileSync(path+'model_vicpark.wppl', 'utf8');
+  var modelCode = fs.readFileSync(path+filename, 'utf8');
   var loopCode = fs.readFileSync(path+'loop.wppl', 'utf8');
 
   let modelObject = getCompiledObject(modelCode)
@@ -352,9 +355,11 @@ function init(rosNode, path){
 
       for(const key in globalStore.actions){
           const publish = globalStore.pubs[key]
-          
+          console.log('publishing '+ globalStore.actions[key] + ' on ' + key)
+          console.log(globalStore.actions[key])
           if(typeof publish == "function"){
             // console.log(publish+"")
+
             publish(globalStore.actions[key])
           }
       }
@@ -388,9 +393,30 @@ function main() {
   rosnodejs.initNode('/rosppl_node')
     .then((nh) => {
       nh.getParam('webppl_path').then((path) => {
-        init(nh, path)
+        nh.getParam('model_file').then((file) => {
+          init(nh, path, file)
+        });
       });
     });    
+
+  rosnodejs.on('shutdown', function() {
+    const { exec } = require("child_process");
+    exec("kill -9 $(ps aux | grep '[l]ibgazebo_ros' | awk '{print $2}')", (error, stdout, stderr) => {
+        if (error) {
+            console.log(`error: ${error.message}`);
+            return;
+        }
+        if (stderr) {
+            console.log(`stderr: ${stderr}`);
+            return;
+        }
+        console.log(`stdout: ${stdout}`);
+    });
+
+    console.log('gazebo kill signal sent!')  
+
+
+  });
 }
 
 if (require.main === module) {
