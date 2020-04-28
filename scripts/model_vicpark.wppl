@@ -299,8 +299,8 @@ globalStore.params = {
 	// sig_s: Gaussian({mu: 1, sigma: 1}),//*/ 0.016, // 5 * Math.PI / 180,
 	// sig_v: Gaussian({mu: 1, sigma: 1}),//*/ 0.16   // 0.1,
 
-	sig_s: Gamma({shape: 1, scale: 1}),//*/ 0.016, // 5 * Math.PI / 180,
-	sig_v: Gamma({shape: 1, scale: 1}),//*/ 0.16,   // 0.1,
+	sig_s: /*Gamma({shape: 1, scale: 1}),//*/ 0.016, // 5 * Math.PI / 180,
+	sig_v: /*Gamma({shape: 1, scale: 1}),//*/ 0.16,   // 0.1,
 	sig_r: /*Gamma({shape: 1, scale: 1}), //*/  0.28, //0.12, //0.005,
 	sig_b: /*Gamma({shape: 1, scale: 1}), //*/  0.012, //2 * Math.PI / 180,
 

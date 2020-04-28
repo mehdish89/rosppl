@@ -17,14 +17,7 @@
 	<node name="vicpark_publish" pkg="rosppl" type="vicpark_trees_publish.py" respawn="true" />
 	
 	<node pkg="rosbag" type="play" name="vicpark_bag_player_required" respawn="true"
-		  args="--clock $(arg path)$(arg bagfile) -r $(arg speed) --wait-for-subscribers --topics /map /trees /dead_reckoning /ground_truth_odom /parameters/sig_r_true /parameters/sig_b_true /parameters/sig_s_true /parameters/sig_v_true"  />
-
-	<node pkg="rostopic" type="rostopic" name="$(anon nowait_topic_1)" args="echo /parameters/sig_r_true" />
-	<node pkg="rostopic" type="rostopic" name="$(anon nowait_topic_2)" args="echo /parameters/sig_b_true" />
-	<node pkg="rostopic" type="rostopic" name="$(anon nowait_topic_3)" args="echo /parameters/sig_v_true" />
-	<node pkg="rostopic" type="rostopic" name="$(anon nowait_topic_4)" args="echo /parameters/sig_s_true" />
-
-
+		  args="--clock $(arg path)$(arg bagfile) -r $(arg speed) --wait-for-subscribers --topics /map /trees /dead_reckoning /ground_truth_odom"  />
 	
 	<!-- <node pkg="rosbag" type="play" name="vicpark_bag_player_optional" output="screen" 
 		args="$(arg path)$(arg bagfile) - -pause-topics /maps /trees /dead_reckoning" /> -->

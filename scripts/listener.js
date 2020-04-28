@@ -321,6 +321,8 @@ function init(rosNode, path, filename='model_vicpark.wppl'){
   globalStore.records = {}
 
   let paramsPub = rosNode.advertise('/params', std_msgs.String);
+  let valuesPub = rosNode.advertise('/parameter_values', 'vicpark_msgs/Parameters');
+
 
   for(let readingName in globalStore.subs) {
     // Handling the message type
@@ -346,6 +348,31 @@ function init(rosNode, path, filename='model_vicpark.wppl'){
       let params = JSON.stringify(globalStore.params)
       paramsPub.publish({data: params})
 
+
+      let pmsg = {
+        params: [],
+        values: []
+      }
+
+      const keys = ['mu', 'sigma']
+
+      for(const k in globalStore.params){
+        let v = globalStore.params[k]
+        if(isNaN(v)){
+          for(const p in v){
+            if(!keys.includes(p))
+              continue
+            pmsg.params.push(k+"."+p)
+            pmsg.values.push(v[p])
+          }
+        }
+        else{
+          pmsg.params.push(k)
+          pmsg.values.push(v)
+        }
+      }
+
+      valuesPub.publish(pmsg)
 
       // console.log("sumW = " + s._sumW)
       // console.log("numFactorCalls = " + s._numFactorCalls)
