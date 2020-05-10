@@ -1,0 +1,16 @@
+<launch>
+
+
+	<param name="webppl_path" value="$(find rosppl)/scripts/" />
+	<!-- <param name="model_file" value="model_inverted_pendulum.wppl" /> -->
+	<param name="model_file" value="planner2d.wppl" />
+
+	<param name="use_sim_time" value="true" />
+
+
+	<!-- <node name="save_params" pkg="rosppl" type="save_params_history.py"  respawn="false" /> -->
+	<!-- if="$(eval saveparams == 'true')" -->
+
+	<node name="rosppl_node" pkg="rosppl"  type="listener.js" launch-prefix="taskset -c 1" respawn="true" output="screen"/>
+
+</launch>
