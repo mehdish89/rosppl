@@ -225,7 +225,7 @@ var model = function(readings, records, prior, params){
 	}
 }
 
-var policy = function(posterior){
+var policy = function(readings, records, posterior, params){
 	var last = MAP(posterior).val
 	var pose = pose_expectation(posterior)
 	var ts = pose.ts ? pose.ts : {secs: 0, nsecs: 0}

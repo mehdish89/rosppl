@@ -51,7 +51,7 @@ var pInfer = function(readings, records, model, prior){
 
   var options = extend(globalStore.options ? globalStore.options : {
     method: 'MCMC',
-    samples: 1000,
+    samples: 10000,
     // onlyMAP: true,
   }, {model: bind})
 
@@ -77,7 +77,7 @@ var rInfer = function(readings, records, model, prior){
 
   var options = extend(globalStore.options ? globalStore.options : {
     method: 'MCMC',
-    samples: 1000,
+    samples: 10000,
     // onlyMAP: true,
   }, {model: bind})
 
@@ -100,70 +100,7 @@ console.log("*******************************")
 // console.log(globalStore.posterior)
 // console.log("*******************************")
 
-// globalStore.actions = globalStore.policy!= undefined && globalStore.posterior!= undefined ? 
-// 							eval.call({}, globalStore.policy)(globalStore.posterior) : {}
-
-
-
-// var policyInfer = function(policy, poseterior) {
-//   var bind = function() {
-//     // return sample(globalStore.posterior)
-//     // return globalStore.policy(globalStore.posterior, globalStore.readings, globalStore.records)
-
-//     // var s = policy(posterior)
-//     // var s = eval.call({}, globalStore.policy)(globalStore.posterior)
-//     var s = eval.call({}, policy)(posterior)
-//     console.log('????')
-//     console.log(s)
-//     console.log('####')
-//     return s
-//   }
-
-//   var options = extend(globalStore.options ? globalStore.options : {
-//     method: 'MCMC',
-//     samples: 100,
-//     // onlyMAP: true,
-//   }, {model: bind})
-
-//   return Infer(options)
-// }
-
-var policyInfer = function(readings, records, model, prior){
-  // console.log(globalStore.prior)
-  var bind = function(){  
-    // var params = MAP(globalStore.params).val
-    var params = sampleAll(globalStore.params)
-
-    return model(readings, records, prior, params)
-    // return model(prior)
-  }
-
-  var options = extend(globalStore.options ? globalStore.options : {
-    method: 'MCMC',
-    // samples: 1000,
-    samples: 500,
-
-    // method: 'SMC',
-    // particles: 100,
-    // onlyMAP: true,
-  }, {model: bind})
-
-  Infer(options)
-}
-
-// globalStore._policy_posterior = globalStore.policy!= undefined && globalStore.posterior!= undefined ? 
-//              policyInfer(globalStore.policy, globalStore.posterior) : {}
-
-
-// console.log('###')
-// console.log(globalStore.records)
-// console.log(globalStore.readings)
-
-var dist = policyInfer(globalStore.readings, globalStore.records, globalStore.policy, globalStore.posterior)
-globalStore._policy_posterior = dist
-globalStore.actions = MAP(dist).val[1]
-console.log(MAP(dist).val[1])
-
-
+globalStore.actions = globalStore.policy!= undefined && globalStore.posterior!= undefined ? 
+							eval.call({}, globalStore.policy)(globalStore.posterior) : {}
 
 

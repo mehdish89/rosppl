@@ -1,0 +1,243 @@
+var min_jerk_interpolator = function(start, end, T){
+  /*
+    Calculate the Jerk Minimizing Trajectory that connects the initial state
+    to the final state in time T.
+
+    INPUTS
+    start - the vehicles start location given as a length three array
+            corresponding to initial values of [s, s_dot, s_double_dot]
+    end   - the desired end state for vehicle. Like "start" this is a
+            length three array.
+    T     - The duration, in seconds, over which this maneuver should occur.
+
+    OUTPUT 
+    an array of length 6, each value corresponding to a coefficent in the polynomial 
+    s(t) = a_0 + a_1 * t + a_2 * t**2 + a_3 * t**3 + a_4 * t**4 + a_5 * t**5
+    */
+
+  var  A = Tensor([3,3], [  Math.pow(T,3),    Math.pow(T,4),    Math.pow(T,5),
+                          3*Math.pow(T,2),  4*Math.pow(T,3),  5*Math.pow(T,4),
+                          6*T            , 12*Math.pow(T,2), 20*Math.pow(T,3)]);
+
+  var b = Vector([end[0] - (start[0] + start[1]*T + 0.5*start[2]*T*T), 
+                    end[1] - (start[1] + start[2]*T), 
+                    end[2] - start[2]])
+    
+  var x = A.inverse().dot(b);
+  // console.log(start)
+  // console.log(end)
+  // console.log(A)
+  // console.log(b)
+  // console.log(A.inverse())
+  // console.log(x)
+  
+//   console.log(x)
+  
+  return function(t){
+    if(t!=undefined)
+      return [sum(ad.tensor.toScalars(Vector([start[0],
+                                            start[1] * t,
+                                            start[2]/2 * Math.pow(t,2),
+                                            x.data[0] * Math.pow(t,3), 
+                                            x.data[1] * Math.pow(t,4), 
+                                            x.data[2] * Math.pow(t,5)]))),
+            sum(ad.tensor.toScalars(Vector([start[1],
+                                           start[2]  * t,
+                                           x.data[0] * Math.pow(t,2) * 3, 
+                                           x.data[1] * Math.pow(t,3) * 4, 
+                                           x.data[2] * Math.pow(t,4) * 5]))),
+            sum(ad.tensor.toScalars(Vector([start[2],
+                                           x.data[0] * t * 2 * 3, 
+                                           x.data[1] * Math.pow(t,2) * 3 * 4, 
+                                           x.data[2] * Math.pow(t,3) * 4 * 5])))]
+                  
+    
+    return 720 * Math.pow(x.data[2], 2) * Math.pow(T,5) +
+      720 * Math.pow(x.data[1], 1) * Math.pow(T,4) * Math.pow(x.data[1], 1) +
+      192 * Math.pow(x.data[1], 2) * Math.pow(T,3) +
+      240 * Math.pow(x.data[0], 1) * Math.pow(T,3) * Math.pow(x.data[2], 1) +
+      144 * Math.pow(x.data[0], 1) * Math.pow(x.data[1], 1) * Math.pow(T,2) +
+       36 * Math.pow(x.data[0], 2) * Math.pow(T,1)            
+  }
+}
+
+var min_jerk_pose_estimator = function(x_start, x_end, T){
+  var xs = x_start.pose.data[2]
+  var ys = x_start.pose.data[5]
+  
+  var xe = x_end.pose.data[2]
+  var ye = x_end.pose.data[5]
+   
+  
+  var vel_start = ad.tensor.toScalars(x_start.vel)
+  
+  var vel_end   = ad.tensor.toScalars(x_end.vel)
+  
+  var acc_start = ad.tensor.toScalars(x_start.acc)
+  
+  var acc_end   = ad.tensor.toScalars(x_end.acc)
+  
+  var s_start = [xs, vel_start[0], acc_start[0]]
+  var s_end   = [xe, vel_end[0], acc_end[0]]
+  
+  var d_start = [ys, vel_start[1], acc_start[1]]
+  var d_end   = [ye, vel_end[1], acc_end[1]]
+
+  
+  var x_traj = min_jerk_interpolator(s_start, s_end, T)
+  var y_traj = min_jerk_interpolator(d_start, d_end, T)
+  
+  return function(t){
+    if(t==undefined) {
+      return x_traj() + y_traj()
+    }
+      
+    
+    var x = x_traj(t) 
+    var y = y_traj(t)
+    var r = Math.atan2(y[1], x[1])    
+    
+    var pose = transform({x: x[0], y: y[0], r: r})
+    var vel = Vector([x[1], y[1]])
+    var acc = Vector([x[2], y[2]])
+
+    return {
+      pose: pose,
+      vel: vel,
+      acc: acc
+    }
+  }
+}
+
+var min_jerk_trajectory = function(start, end, T) {
+	var interpolator = min_jerk_interpolator(
+		[start.x, start.vx, start.ax],
+		[end.x, end.vx, end.ax],
+		T
+	)
+
+	return function(t) {
+		var state = interpolator(t)
+		// console.log(state)
+		return {
+			x: state[0],
+			vx: state[1],
+			ax: state[2]
+		}
+	}
+}
+
+var is_in_junction = function(car, junction){
+	return (car.x > junction.x - junction.theta/2 - 2 && 
+		    car.x < junction.x + junction.theta/2 + 2)
+}
+
+var noisify = function(state) {
+	return extend(state, {
+		x: gaussian(state.x, 0.5),
+		// ax: gaussian(state.ax, 10)
+	})
+}
+
+var light = function(t_0) {
+	var t = t_0 //% 10
+	if (0 <= t && t < 4)
+		return 'green'
+	if (4 <= t && t < 5)
+		return 'yellow'
+	return 'red'
+}
+
+var model = function(readings, records, prior, params){
+	var dt = 0.1
+	var last = prior.support != undefined ? sample(prior) : prior
+	var t_light = last.t_light!=undefined ? last.t_light + gaussian(dt, 0.025) : uniform(0, 10)
+	return { 
+		t_light: t_light
+	}
+}
+
+var policy = function(readings, records, posterior, params){
+	var state = sample(posterior)
+	// console.log(posterior)
+	// console.log(state)
+	// console.log(state.t_light)
+	// console.log(records)
+
+	if(records.goal == undefined || readings.pose == undefined)
+		return []
+
+	
+	var start = extend(readings.pose, {
+		vx: records.vel.x,
+		ax: records.acc.x,
+	})
+	var end = extend(records.goal, {
+		x: uniform(start.x, records.goal.x),
+		vx: 0, 
+		ax: 0
+	})
+	
+	var plan = function(current, goal, dt, steps){
+		if(steps <= 0) return [current]
+
+		condition(current.vx >= 0.)
+		condition(
+			!is_in_junction(current, records.junction) ||
+			light(dt * steps + state.t_light) != 'red'
+		)
+
+		var traj = min_jerk_trajectory(current, goal, steps * dt)
+		var next = extend(traj(dt), {y: current.y, r: current.r})
+		condition(next.vx < 28 && next.vx>=0 && Math.abs(next.ax) <10)
+		 	
+		return [current].concat(plan(next, goal, dt, steps-1))
+	}
+
+	var T = uniform(0, 6)// 5
+	var dt = 0.1
+	var steps = T/dt
+
+	var path = plan(start, end, 0.1, steps)
+	factor(end.x-start.x)
+	factor(-T)
+	return path
+}
+
+
+globalStore.model = model
+globalStore.policy = policy
+globalStore.prior = {
+}
+
+globalStore.subs = {
+	pose: "/pose",
+}
+
+globalStore.pubs = {
+	// odom: "/odom",
+	// landmarks: "/landmarks",
+	// ax: {
+	// 	topic: '/command/data',
+	// 	type: "std_msgs/Float32",
+	// }
+
+	ax: '/command/data'
+}
+
+globalStore.reps = {
+	pose: "/pose",
+	vel: "/twist/linear",
+	acc: "/accel/linear",
+	light: "/light/data",
+	goal: "/goal",
+	junction: "/junction",
+}
+
+globalStore.params = {
+}
+
+// globalStore.options = {
+// 	samples: 100
+// }
+

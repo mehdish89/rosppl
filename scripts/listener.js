@@ -78,9 +78,15 @@ function setSubValue(object, trace, data) {
     
     if(keyName=='')
       continue
+    
+    console.log(i + " " + JSON.stringify(value) + " " + keyName) 
 
     if(i == keys.length-1){
-      extend(value[keyName], data)
+      if(data instanceof Object)
+        extend(value[keyName], data)
+      else
+        value[keyName] = data
+      console.log(JSON.stringify(object)) 
       return object
     }
 
@@ -179,7 +185,15 @@ function advertiseValue(nodeHandle, value){
   return function(data) {
     var msg = new topicType()
 
+
+
     msg = setSubValue(msg, value.key, data)
+    
+    console.log(value)
+    console.log(value.key)
+    console.log(data)
+    console.log(msg)
+
     pub.publish(msg)
   }
 }
@@ -322,7 +336,7 @@ function init(rosNode, path, filename='model_vicpark.wppl'){
 
   let paramsPub = rosNode.advertise('/params', std_msgs.String);
   let valuesPub = rosNode.advertise('/parameter_values', 'vicpark_msgs/Parameters');
-
+  let policyPub = rosNode.advertise('/policy_posterior', std_msgs.String);
 
   for(let readingName in globalStore.subs) {
     // Handling the message type
@@ -347,6 +361,12 @@ function init(rosNode, path, filename='model_vicpark.wppl'){
 
       let params = JSON.stringify(globalStore.params)
       paramsPub.publish({data: params})
+
+      let policy_str = JSON.stringify(globalStore._policy_posterior.getDist())
+      policyPub.publish({data: policy_str})
+      // console.log('policy posterior:')
+      // console.log(globalStore._policy_posterior.getDist())
+      // console.log(Object.keys(globalStore._policy_posterior))
 
 
       let pmsg = {
@@ -382,11 +402,13 @@ function init(rosNode, path, filename='model_vicpark.wppl'){
 
       for(const key in globalStore.actions){
           const publish = globalStore.pubs[key]
-          console.log('publishing '+ globalStore.actions[key] + ' on ' + key)
-          console.log(globalStore.actions[key])
+          // console.log('publishing '+ globalStore.actions[key] + ' on ' + key)
+          // console.log(globalStore.actions[key])
           if(typeof publish == "function"){
             // console.log(publish+"")
-
+            console.log(key)
+            console.log(publish)
+            console.log(globalStore.actions[key])
             publish(globalStore.actions[key])
           }
       }
